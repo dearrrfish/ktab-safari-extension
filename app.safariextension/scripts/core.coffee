@@ -13,6 +13,10 @@ config.shell =
     shellPanelId: 'shell-panel'
     inputId: 'shell-cli'
 
+config.main =
+    aboutWrapperId: 'about-info-wrapper'
+
+
 shell = ConsolePanel(config.shell)
 
 # DOM ready
@@ -26,15 +30,22 @@ $ ->
     onKeyDown = (e) ->
         pressedKey = $('.k' + e.keyCode)
         pressedKey.addClass('pressed');
-        return if not pressedKey.hasClass('key') or (shell and shell.isActive())
-        fkey = 0
-        fkey += 1 if e.ctrlKey
-        fkey += 2 if e.altKey
-        fkey += 4 if e.shiftKey
-        safari.self.tab.dispatchMessage('pressedKeyNavigate', { key: e.keyCode, fkey: fkey })
-        return
+        # do nothing more if function key or console is open
+        if not pressedKey.hasClass('key') or (shell and shell.isActive())
+            return
+        # close if about page is open
+        else if $('#' + config.main.aboutWrapperId).css('display') isnt 'none'
+            console.log('display: ' + $('#'+config.main.aboutWrapperId).css('display'))
+            doToggleAbout()
+        # otherwise, send message to extension
+        else
+            fkey = 0
+            fkey += 1 if e.ctrlKey
+            fkey += 2 if e.altKey
+            fkey += 4 if e.shiftKey
+            safari.self.tab.dispatchMessage('pressedKeyNavigate', { key: e.keyCode, fkey: fkey })
 
-    onKeyPressed = (e) ->
+    #onKeyPressed = (e) ->
 
     # Add event listener
     $(window).on('keyup', onKeyUp)
@@ -67,12 +78,19 @@ $ ->
         else
             shell.activateAndShow()
 
+    doToggleAbout = () ->
+        $('#about-info-wrapper').toggle("clip", {}, 500)
+
+    $('#about-sign-wrapper').click(doToggleAbout)
+
     # Message handlers
     Messanger.handleEvent = (e) ->
         log.d('handleMessage: ', e)
         switch e.name
             when 'toggleConsole'
                 doToggleConsole()
+            when 'toggleAbout'
+                doToggleAbout()
             when 'consoleResponse'
                 Messanger.handleConsoleEvent?(e)
 

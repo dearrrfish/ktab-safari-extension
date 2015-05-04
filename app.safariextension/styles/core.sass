@@ -1,4 +1,4 @@
-//UPDATE: Fixed for SASS 3.3 
+//UPDATE: Fixed for SASS 3.3
 // Colours
 $black: #4d4d4d
 $keyboard: #f5f3f1
@@ -13,11 +13,45 @@ $text: #555
 body
   width: 890px
   margin: 0 auto
-  padding: 100px 30px 30px
+  padding: 0 30px 30px
   font-family: 'Average Sans', sans-serif
   color: $text
   text-shadow: 0 0 1px rgba(0,0,0,0.1)
   background: #C7DBE5
+
+
+#main-container
+  padding-top: 100px
+  position: relative
+
+// About sign
+#about-sign-wrapper
+  float: right
+  padding: 15px 5px 0 0
+  a
+    text-decoration: none
+  .about-sign
+    border-radius: 50%
+    width: 14px
+    height: 14px
+    border: 2px solid #c5c5c5
+    color: #c5c5c5
+    text-align: center
+    font: 14px Arial, sans-serif
+    font-weight: 700
+
+#about-info-wrapper
+  position: absolute
+  padding: 5px 10px
+  margin: 45px 35px
+  width: 800px
+  height: 500px
+  z-index: 9000
+  background: rgba(197, 197, 197, 0.71)
+  display: none
+  a
+    text-decoration: none
+
 
 /*------- Keyboard -------*/
 // Awesome CSS/HTML keyboard by @PeiweiLu: http://codepen.io/P233/details/qEagi
@@ -36,6 +70,7 @@ body
   //-webkit-transform: rotateX(15deg)
   //-ms-transform: rotateX(15deg)
   //-o-transform: rotateX(15deg)
+  position: absolute
 
 #main
   padding: 2px
@@ -200,6 +235,9 @@ body
     -ms-transform: scale(0.98, 0.95)
     -o-transform: scale(0.98, 0.95)
     transform: scale(0.98, 0.95)
+
+
+
 
 /////////////////////////////////////////////////////////////////////////////////////
 /* Josh shell styles */

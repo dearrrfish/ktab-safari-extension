@@ -42,6 +42,7 @@ kTab.loadSettings = () ->
         logLevel: safari.extension.settings.logLevel || kTab.configs.logLevel.default
         actions: safari.extension.settings.actions || {
             toggleConsole: true
+            toggleAbout: true
             # ...
         }
 
@@ -172,10 +173,15 @@ kTab.commands =
         return log.e('execAction: missing action name in settings.') if not action
         switch action
             when 'toggleConsole' then @doToggleConsole(e)
+            when 'toggleAbout' then @doToggleAbout(e)
 
     # Toggle console
     doToggleConsole: (e) ->
         e.target.page.dispatchMessage('toggleConsole')
+
+    # Toggle about overlay
+    doToggleAbout: (e) ->
+        e.target.page.dispatchMessage('toggleAbout')
 
     # Show/open tab with given url
     showUrl : (url, options..., e) ->
