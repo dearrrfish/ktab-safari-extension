@@ -8,24 +8,19 @@
     <link rel="stylesheet" href="styles/core.css">
     <!-- endbuild -->
 
-    <!-- build:js scripts/libs.js -->
-    <script src="libs/jquery/dist/jquery.min.js"></script>
-    <script src="libs/jquery-ui/jquery-ui.min.js"></script>
-    <!--<script src="libs/underscore/underscore-min.js"></script>-->
-    <!-- endbuild -->
-    <!-- build:js scripts/josh.js -->
-    <script src="libs/josh/js/history.js"></script>
-    <!--<script src="libs/josh/js/killring.js"></script>-->
-    <script src="libs/josh/js/readline.js"></script>
-    <!--<script src="libs/josh/js/input.js"></script>-->
-    <script src="libs/josh/js/shell.js"></script>
-    <!--<script src="libs/josh/js/pathhandler.js"></script>-->
-    <!-- endbuild -->
+    <!--[> build:js scripts/libs.js <]-->
+    <!--<script src="libs/jquery/dist/jquery.min.js"></script>-->
+    <!--<script src="libs/jquery-ui/jquery-ui.min.js"></script>-->
+    <!--[><script src="libs/underscore/underscore-min.js"></script><]-->
+    <!--[> endbuild <]-->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.3/underscore-min.js"></script>
 
     <!-- build:js scripts/main.js -->
     <script src="scripts/utils.js"></script>
-    <script src="scripts/handlers.js"></script>
-    <script src="scripts/console.js"></script>
+    <script src="scripts/strings.js"></script>
+    <script src="scripts/fakelight.js"></script>
     <script src="scripts/core.js"></script>
     <!-- endbuild -->
 
@@ -42,6 +37,8 @@
     <div id="about-info-wrapper">
         <p>Awesome CSS/HTML keyboard by <a href="http://codepen.io/P233/details/qEagi">@PeiwenLu</a></p>
     </div>
+
+    <div id="fl-container"></div>
 
     <div id="main-container">
 

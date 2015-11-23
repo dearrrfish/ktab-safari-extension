@@ -218,6 +218,7 @@ module.exports = function (grunt) {
             '{,*/}*.html',
             'styles/fonts/{,*/}*.*',
             '{,*/}*.plist',
+            '*.sql',
           ]
         }]
       }

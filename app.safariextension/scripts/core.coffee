@@ -1,26 +1,25 @@
 'use strict'
 
 Utils = window.Utils
-log = Utils.log or { i: -> e: -> d: -> }
+log = Utils.log
+id = Utils.id
 
-Messanger = window.Messanger or {}
-ConsolePanel = window.ConsolePanel or {}
+FakeLight = window.FakeLight
 
 config = {}
-config.shell =
-    name: 'KTab.ConsolePanel'
-    shellViewId: 'shell-view'
-    shellPanelId: 'shell-panel'
-    inputId: 'shell-cli'
 
-config.main =
-    aboutWrapperId: 'about-info-wrapper'
+config.about =
+    wrapperId: 'about-info-wrapper'
+    signWrapperId: 'about-sign-wrapper'
 
-
-shell = ConsolePanel(config.shell)
 
 # DOM ready
 $ ->
+    flight = Fakelight()
+    if flight.error
+        alert(flight.error)
+    $about = $('#' + config.about.wrapperId)
+
     # kTab keyup/down handlers
     onKeyUp = (e) ->
         pressedKey = $('.k' + e.keyCode)
@@ -31,67 +30,41 @@ $ ->
         pressedKey = $('.k' + e.keyCode)
         pressedKey.addClass('pressed');
         # do nothing more if function key or console is open
-        if not pressedKey.hasClass('key') or (shell and shell.isActive())
+        if flight?.isActive()
             return
         # close if about page is open
-        else if $('#' + config.main.aboutWrapperId).css('display') isnt 'none'
-            console.log('display: ' + $('#'+config.main.aboutWrapperId).css('display'))
+        else if Utils.isShown($about)
+            e.preventDefault()
             doToggleAbout()
         # otherwise, send message to extension
-        else
+        else if pressedKey.hasClass('key')
             fkey = 0
             fkey += 1 if e.ctrlKey
             fkey += 2 if e.altKey
             fkey += 4 if e.shiftKey
             safari.self.tab.dispatchMessage('pressedKeyNavigate', { key: e.keyCode, fkey: fkey })
 
-    #onKeyPressed = (e) ->
 
     # Add event listener
     $(window).on('keyup', onKeyUp)
     $(window).on('keydown', onKeyDown)
 
-
-    ###
-    ConsolePanel actions
-    ###
-    shell.$el = $('#' + config.shell.shellPanelId)
-    shell.$el.resizable({ handles: 's' })
-
-    shell.activateAndShow = () ->
-        shell.activate()
-        shell.$el.slideDown()
-        shell.$el.focus()
-
-    shell.deactivateAndHide = () ->
-        shell.$el.slideUp()
-        shell.$el.blur()
-        shell.deactivate()
-
-    shell.onEOT(shell.deactivateAndHide)
-    shell.onCancel(shell.deactivateAndHide)
-
-
-    doToggleConsole = () ->
-        if (shell.isActive())
-            shell.deactivateAndHide()
-        else
-            shell.activateAndShow()
-
+    # About/Help overlay
     doToggleAbout = () ->
-        $('#about-info-wrapper').toggle("clip", {}, 500)
+        $about.toggle("clip", {}, 500)
 
-    $('#about-sign-wrapper').click(doToggleAbout)
+    $('#' + config.about.signWrapperId).click(doToggleAbout)
 
     # Message handlers
-    Messanger.handleEvent = (e) ->
+    handleEvent = (e) ->
         log.d('handleMessage: ', e)
         switch e.name
-            when 'toggleConsole'
-                doToggleConsole()
             when 'toggleAbout'
                 doToggleAbout()
-            when 'consoleResponse'
-                Messanger.handleConsoleEvent?(e)
+            when 'toggleFakelight'
+                flight.toggle()
+            when 'fakelight'
+                Messanger.handleFakelight?(e)
 
-    safari.self.addEventListener('message', Messanger.handleEvent, false)
+
+    safari.self.addEventListener('message', handleEvent, false)

@@ -1,14 +1,17 @@
 'use strict'
 
 Utils = window.Utils
+Strings = window.Strings
 log = window.Utils.log
 
 # Global object
-kTab =
+KTab =
     version: safari.extension.bundleVersion
     browserWindows: safari.application.browserWindows
     mainUrl: safari.extension.baseURI + 'main.html'
     trigger: false
+    db: null
+
     configs: {
         singleton: {
             description: "Only one instance in window"
@@ -28,111 +31,107 @@ kTab =
         logLevel: {
             description: "Logging level in browser console"
             type: 'string'
-            default: 'error'
+            default: 'debug'
         }
     }
 
 # Settings
 
-kTab.loadSettings = () ->
-    kTab.settings =
-        singleton: safari.extension.settings.singleton || kTab.configs.singleton.default
-        openUrlInNewTab: safari.extension.settings.openUrlInNewTab || kTab.configs.openUrlInNewTab.default
-        timeout: safari.extension.settings.timeout || kTab.configs.timeout.default
-        logLevel: safari.extension.settings.logLevel || kTab.configs.logLevel.default
-        actions: safari.extension.settings.actions || {
-            toggleConsole: true
-            toggleAbout: true
-            # ...
-        }
+KTab.loadSettings = () ->
+    safari.extension.settings.logLevel = safari.extension.settings.logLevel ? 'debug';
 
-kTab.saveSettings = (option) ->
+    KTab.settings =
+        singleton: safari.extension.settings.singleton or KTab.configs.singleton.default
+        openUrlInNewTab: safari.extension.settings.openUrlInNewTab or KTab.configs.openUrlInNewTab.default
+        timeout: safari.extension.settings.timeout or KTab.configs.timeout.default
+        logLevel: safari.extension.settings.logLevel or KTab.configs.logLevel.default
+
+
+KTab.saveSettings = (option) ->
     if option?
-        safari.extension.settings[option] = kTab.settings[option] if option of kTab.settings
+        safari.extension.settings[option] = KTab.settings[option] if option of KTab.settings
     else
-        for opt in kTab.settings
-            safari.extension.settings[opt] = kTab.settings[opt]
+        for opt in KTab.settings
+            safari.extension.settings[opt] = KTab.settings[opt]
 
 
 # Default mapping
 # -- fkey_state: use binary number by sequence <shift><alt><ctrl>.
 # -- e.g. 6 => 110 => pressed <alt> and <shift>
-kTab.defaultBindings =
+KTab.defaultBindings =
     '86': {
         '0': {name: 'V2EX', type: 'url', url: 'https://v2ex.com'}
     }
-    '192': {
-        '4': {name: 'Toggle Console', type: 'action', action: 'toggleConsole', url: 'ktab://toggleConsole'}
+    '32': {
+        '1': {name: 'Fakelight', type: 'action', action: 'toggleFakelight', url: 'ktab://toggleFakelight'}
     }
 
-kTab.loadBindings = () ->
-    kTab.settings.bindings = safari.extension.settings.bindings or kTab.defaultBindings
+KTab.loadBindings = () ->
+    KTab.settings.bindings = safari.extension.settings.bindings or KTab.defaultBindings
 
-kTab.updateBindings = () ->
-    safari.extension.settings.bindings = kTab.settings.bindings
+KTab.updateBindings = () ->
+    safari.extension.settings.bindings = KTab.settings.bindings
+
 
 # Define commands
-kTab.commands =
+KTab.commands =
     # Init
     init: () ->
-        @checkVersion()
-        @loadSettings()
-        return
+        try
+            if not localStorage['version']?
+                safari.extension.settings = {}
+                localStorage['version'] = KTab.version
 
-    # Check and store version
-    checkVersion: () ->
-        if not localStorage['version']?
-            safari.extension.settings = {}
-            localStorage['version'] = kTab.version
-
-    # Load settings
-    loadSettings: () ->
-        kTab.loadSettings()
-        kTab.loadBindings()
+            KTab.loadSettings()
+            KTab.loadBindings()
+            KTab.db = KTabDatabase()
+            KTab.db.init({debug: true})
+        catch e
+            log.e('initialization failed (' + e.message + ')')
 
     # Show main(navigator) page
     showMain: (e) ->
-        if kTab.settings.singleton or e.target not instanceof SafariBrowserTab
-            @showUrl(kTab.mainUrl, e)
+        if KTab.settings.singleton or e.target not instanceof SafariBrowserTab
+            @showUrl(KTab.mainUrl, e)
         else
-            e.target.url = kTab.mainUrl
+            e.target.url = KTab.mainUrl
 
     # Get existing binding
     getBindingByHotKey: (key, fkey) ->
-        bindings = kTab.settings.bindings
+        bindings = KTab.settings.bindings
         return bindings[key]?[fkey] or null
 
     # Get all bindings on key
     getBindingsOnKey: (key) ->
-        return kTab.settings.bindings[key] or null
+        return KTab.settings.bindings[key] or null
 
     # Set binding
     setBinding: (req) ->
-        bindings = kTab.settings.bindings or {}
+        bindings = KTab.settings.bindings or {}
         bindings[req.key] = bindings[req.key] or {}
         binding = {name: req.name, type: req.type, url: req.url}
         if req.type is 'action'
-            return 'ERROR<setBinding|Action>: Invalid or disallowed action. - [' + req.dest + ']' if not kTab.settings.actions[req.dest]
+            #return 'ERROR<setBinding|Action>: Invalid or disallowed action. - [' + req.dest + ']' if not KTab.settings.actions[req.dest]
             binding.action = req.dest
         bindings[req.key][req.fkey] = binding
-        kTab.updateBindings()
+        KTab.updateBindings()
         log.d('setBinding: ', [req.key, req.fkey, binding])
         return 'OK: Set ' + req.type + ' binding successfully!'
 
     # Unset binding by hotkey
     unsetBinding: (req) ->
-        bindings = kTab.settings.bindings or {}
+        bindings = KTab.settings.bindings or {}
         if bindings[req.key]?[req.fkey]
             delete bindings[req.key][req.fkey]
             delete bindings[req.key] if Object.keys(bindings[req.key]).length is 0
-            kTab.updateBindings()
+            KTab.updateBindings()
             return 'OK: Unset binding successfully!'
         else
             return 'KO: Unable to locate binding by given hotkey.'
 
     # Show all bindings
     showBindings: (req) ->
-        bindings = kTab.settings.bindings or {}
+        bindings = KTab.settings.bindings or {}
         log.d('Global|showBindings(): ', bindings);
         results = []
         for own key of bindings
@@ -145,8 +144,8 @@ kTab.commands =
 
     # Set app configuration
     setOption: (req) ->
-        return 'KO: Unknown option. - [' + req.option + ']' if req.option not of kTab.configs
-        defaults = kTab.configs[req.option]
+        return 'KO: Unknown option. - [' + req.option + ']' if req.option not of KTab.configs
+        defaults = KTab.configs[req.option]
         res = 'OK: ' + defaults.description + ': '
 
         value = Utils.parseValue(defaults.type, req.value, req.selects)
@@ -154,8 +153,8 @@ kTab.commands =
             res = 'KO: Parse option value error. - [' + value.error + ']'
         else
             res += value[defaults.type]
-            kTab.settings[req.option] = value[defaults.type]
-            kTab.saveSettings(req.option)
+            KTab.settings[req.option] = value[defaults.type]
+            KTab.saveSettings(req.option)
         return res
 
 
@@ -174,6 +173,7 @@ kTab.commands =
         switch action
             when 'toggleConsole' then @doToggleConsole(e)
             when 'toggleAbout' then @doToggleAbout(e)
+            when 'toggleFakelight' then @doToggleFakelight(e)
 
     # Toggle console
     doToggleConsole: (e) ->
@@ -183,20 +183,25 @@ kTab.commands =
     doToggleAbout: (e) ->
         e.target.page.dispatchMessage('toggleAbout')
 
+    # Toggle Fakeligh
+    doToggleFakelight: (e) ->
+        e.target.page.dispatchMessage('toggleFakelight')
+
     # Show/open tab with given url
     showUrl : (url, options..., e) ->
         return log.e('showUrl: missing url in settings.') if not url
 
         # Open in new tab if trigger from settings
         openUrlInNewTab = true if not e?.target or e.target instanceof SafariExtensionSettings
-        openUrlInNewTab = (options?.openUrlInNewTab ? kTab.settings.openUrlInNewTab) if not openUrlInNewTab
+        openUrlInNewTab = (options?.openUrlInNewTab ? KTab.settings.openUrlInNewTab) if not openUrlInNewTab
 
-        targetWindows = if url is kTab.mainUrl then [safari.application.activeBrowserWindow] else safari.application.browserWindows
+        isTargetMain = url is KTab.mainUrl
+        targetWindows = if isTargetMain then [safari.application.activeBrowserWindow] else safari.application.browserWindows
         # Find exist tab with given url
         for window in targetWindows
             tabs = window.tabs
             for tab in tabs
-                if tab.url is url
+                if tab.url is url or (isTargetMain and tab.url.match(KTab.mainUrl)?.index is 0)
                     window.activate()
                     tab.activate()
                     e.target.close() if e?.target instanceof SafariBrowserTab
@@ -214,9 +219,58 @@ kTab.commands =
             newTab.activate()
         return
 
+    ajaxPreviewUrl: (url, callback) ->
+        res = {error: false}
+        $.ajax({
+            url: url
+            success: (data) ->
+                $html = $.parseHTML(data)
+                res.title = $html.filter('title').text()
+                # get more...
+            error: () ->
+                res.error = Strings.err_ajax_preview_url_failed + ' - ' + url
+            complete: () ->
+                callback?(res)
+        })
+
+KTab.findBookmark = (req, callback) ->
+    
+
+
+KTab.setInternalHotkey = (req, callback) ->
+    
+
+
+
+# Fakelight handler
+KTab.fakelight =
+    enabled: true    # TODO add switch option
+
+    # keywords of commands
+    commands:
+        find: (id, req, e) ->
+            KTab.db.retrieveAllBookmarks((results) ->
+                e.target.page.dispatchMessage('fakelight', {refId: id, cmd: 'find', results: results})
+            )
+
+        set: (id, req, e) ->
+            # protocol = 'ktab', is an action other than web url
+            if req.protocol is 'ktab'
+                #res = KTab.setInternalHotkey(req)
+            else
+                #res = KTab.setBookmarkHotkey(req)
+            return res
+
+
+    exec: (e) ->
+        if e.message.cmd of @commands
+            @commands[e.message.cmd]?(e.message.reqId, e.message.request, e)
+        else
+            log.e(Strings.err_internal_coding_error + ' - [no such command - `' + e.message.cmd + '`]')
+
 
 # Initialize
-kTab.commands.init()
+KTab.commands.init()
 
 ######################
 
@@ -227,52 +281,59 @@ handleSettingsChange = (e) ->
         when 'showMain'
             if e.newValue is true
                 safari.extension.settings.showMain = false
-                kTab.commands.showMain(e)
+                KTab.commands.showMain(e)
     return
 
 handleOpen = (e) ->
     if e.target instanceof SafariBrowserTab
-        kTab.trigger = false
+        KTab.trigger = false
         e.target.addEventListener('beforeNavigate', handleBeforeNavigate, false)
         setTimeout(() ->
             e.target.removeEventListener('beforeNavigate', handleBeforeNavigate, false)
-            if not kTab.trigger
+            if not KTab.trigger
                 log.d('beforeNavigate NOT trigger.', e)
                 e.preventDefault()
-                kTab.commands.showMain(e)
+                KTab.commands.showMain(e)
             return
-        , kTab.settings.timeout)
+        , KTab.settings.timeout)
     return
 
 handleBeforeNavigate = (e) ->
-    kTab.trigger = true
+    KTab.trigger = true
     e.target.removeEventListener('beforeNavigate', handleBeforeNavigate, false)
     log.d('beforeNavigate triggers.', e)
     # TODO e.url is null, which could be safari top sites, bookmarks, or pages of extensions
-    if e.url is kTab.mainUrl
-        kTab.commands.showMain(e)
+    if e.url is KTab.mainUrl
+        KTab.commands.showMain(e)
     return
 
 handleMessage = (e) ->
     log.d('Received message: ', e)
     switch e.name
         when 'pressedKeyNavigate'
-            found = kTab.commands.getBindingByHotKey(e.message.key, e.message.fkey)
+            found = KTab.commands.getBindingByHotKey(e.message.key, e.message.fkey)
             log.d('Key binding: ', found)
             return if not found?
-            kTab.commands.exec(found, e)
+            KTab.commands.exec(found, e)
+
+        when 'fakelightCommand'
+            if KTab.fakelight.enabled
+                KTab.fakelight.exec?(e)
+            else
+                log.e('Fakelight is disabled.')
+
         when 'consoleRequest'
             req = e.message.request
             res = null
             switch (e.message.cmd)
                 when 'setBinding'
-                    res = kTab.commands.setBinding(req)
+                    res = KTab.commands.setBinding(req)
                 when 'unsetBinding'
-                    res = kTab.commands.unsetBinding(req)
+                    res = KTab.commands.unsetBinding(req)
                 when 'showBindings'
-                    res = kTab.commands.showBindings(req)
+                    res = KTab.commands.showBindings(req)
                 when 'setOption'
-                    res = kTab.commands.setOption(req)
+                    res = KTab.commands.setOption(req)
             e.target.page.dispatchMessage('consoleResponse', {cmd: e.message.cmd, response: res})
     return
 
@@ -282,3 +343,4 @@ safari.application.addEventListener('open', handleOpen, true)
 safari.application.addEventListener('message', handleMessage, false);
 
 log.i('Thanks for using kTab!')
+log.d('current mode: debug')

@@ -9,17 +9,24 @@ log =
 
     log: (level, msg, arg) ->
         if _accessSettings
-            config = safari.extension.settings.logLevel
+            config = safari.extension.settings.logLevel ? 'debug'
         else
-            config = localStorage['_log_level'] ? 'error'
+            config = localStorage['_log_level'] ? 'debug'
 
         return if @levels.indexOf(config) < @levels.indexOf(level)
+
         _level = '%c[' + level.toUpperCase() + ']'
-        _level_css = 'font-weight: bold;' + (if level is 'error' then 'color: red' else '')
+        _level_css = 'font-weight: bold;'
         _msg = '%c' + (if typeof msg is 'string' then msg else '')
-        _msg_css = '' + (if level is 'error' then 'color: red' else '')
+        _msg_css = ''
         _arg = arg ? ''
-        console.log(_level + _msg, _level_css, _msg_css, _arg)
+
+        if level is 'error'
+            _level_css += 'color:red;'
+            _msg_css += 'color:red;'
+            console.error(_level+_msg, _level_css, _msg_css)
+        else
+            console.log(_level + _msg, _level_css, _msg_css, _arg)
 
     i: (msg, arg) ->
         @log('info', msg, arg)
@@ -34,6 +41,61 @@ log =
         #return e in arr2
     #)
 
+
+notify = (title, body = '', tag = 'defaultNotify') ->
+    return if not window.Notification
+    switch Notification.permission
+        when 'default'
+            Notification.requestPermission(() ->
+                notify()
+            )
+        when 'granted'
+            n = new Notification(title, { body: body, tag: tag})
+            n.onclick = -> @close()
+            n.onclose = -> log.d('Notification closed. tag=' + tag)
+        when 'denied'
+            return
+
+
+replaceInputs = (str, inputs = {}) ->
+    return String(str).replace(/\[.+\]/g, (s) ->
+        return inputs[s] or s
+    )
+
+entityMap =
+    "&": "&amp;"
+    "<": "&lt;"
+    ">": "&gt;"
+    '"': '&quot;'
+    "'": '&#39;'
+    "/": '&#x2F;'
+
+escapeHtml = (str) ->
+    return String(str).replace(/[&<>"'\/]/g, (s) ->
+        return entityMap[s]
+    )
+
+findMatch = (m, obj, mapf, sortf) ->
+    best = false
+    r = []
+    for o of obj
+        if m is o
+            best = mapf?(obj[o]) or obj[o]
+        else if m is '' or o.match(m)
+            r.push(mapf?(obj[o]) or obj[o])
+    r.sort(sortf) if typeof sortf is 'function'
+    r.unshift(best) if best
+    return r
+
+# Merge all properties of b to a
+merge = (a, b) ->
+    for p of b
+        if typeof b[p] is 'object' and typeof a[p]? is 'object'
+            a[p] = merge(a[p], b[p])
+        else
+            a[p] = b[p]
+
+    return a
 
 reverseMap = (o) ->
     ro = {}
@@ -164,6 +226,7 @@ parseValue = (type, value, selects = []) ->
             result.error = 'unknown value type - ' + type
     return result
 
+
 parseArguments = (args, defaults = [], require = true) ->
     result = {error: false}
     currentArgName = ''
@@ -196,7 +259,7 @@ parseArguments = (args, defaults = [], require = true) ->
     return result
 
 
-parseHotKeyString = (hotkey) ->
+parseHotKeyString = (hotkey, argName = '') ->
     result = {error: false, hotkey: hotkey}
     fkeyMap = {}
     fkey = 0
@@ -204,7 +267,7 @@ parseHotKeyString = (hotkey) ->
     keys = hotkey.split('+')
     for k in keys
         k = k.toLowerCase()
-        kc = Utils.getKeyCode(k)
+        kc = getKeyCode(k)
         if not kc
             result.error = 'unknown/invalid key - `' + k + '`'
         else if kc.length > 1
@@ -217,38 +280,41 @@ parseHotKeyString = (hotkey) ->
         else
             key = kc[0]
         break if result.error
-    return result if result.error
-    fkey += fkeyMap[fk] for fk of fkeyMap
-    if not key
-        result.error = 'main key is missing'
-    else
-        result.key = key
-        result.fkey = fkey
+    if not result.error
+        fkey += fkeyMap[fk] for fk of fkeyMap
+        if not key
+            result.error = 'main key is missing'
+        else
+            result[argName + 'key'] = key
+            result[argName + 'fkey'] = fkey
 
     return result
 
 
-parseUrlString = (url) ->
-    result = {error: false, url: url}
+parseUrlString = (url, argName = '') ->
+    result = {error: false}
+    result[argName + 'url'] = url
     protocol = (url.match(/.*:\/\//) or [''])[0].slice(0, -3).toLowerCase()
     if not protocol
         result.error = 'missing protocol in url schema - `' + url + '`'
     else
         dest = url.slice(protocol.length + 3)
         result.error = 'missing destination in url schema - `' + url + '`' if not dest
-    result.protocol = protocol
-    result.dest = dest
+    result[argName + 'protocol'] = protocol
+    result[argName + 'dest'] = dest
     return result
 
 
-parseHotKeyCode = (key, fkey) ->
-    result = {error: false, key: key, fkey: fkey}
-    keyString = Utils.getCodeKey(key)
-    fkeyString = Utils.getCodeKey(fkey, true)
+parseHotKeyCode = (key, fkey, argName = '') ->
+    result = {error: false}
+    result[argName + 'key'] = key
+    result[argName + 'fkey'] = fkey
+    keyString = getCodeKey(key)
+    fkeyString = getCodeKey(fkey, true)
     if keyString is false or fkeyString is false
         result.error = 'incorrect hotkey code given - `' + [key, fkey] + '`'
     else
-        result.string = (if fkeyString then fkeyString + '+' else '') + keyString
+        result[argName + 'hotkeyString']= (if fkeyString then fkeyString + '+' else '') + keyString
     return result
 
 
@@ -264,10 +330,62 @@ parseBindingObject = (binding) ->
     return result
 
 
+id = (_id) ->
+    return '#' + _id
+
+isShown = (el) ->
+    $el = if typeof el is 'string' then $(el) else el
+    return true if $el.css('display') isnt 'none'
+    return false
+
+
+
+
+
+repeat = (s, n) ->
+    return new Array(parseInt(n) + 1).join(s)
+
+
+generateRandomId = (l = 4) ->
+    l = 8 if l > 8
+    return (repeat('0', l) + (Math.random()*Math.pow(36,l) << 0).toString(36)).slice(-l)
+
+
+generateUUID = () ->
+    d = new Date().getTime()
+    uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) ->
+        r = (d + Math.random()*16)%16 | 0
+        d = Math.floor(d/16)
+        return (if c is 'x' then r else (r&0x3|0x8)).toString(16)
+    )
+    return uuid
+
+
+formatDate = (date) ->
+    date = date ? new Date()
+    formatted = (date.toISOString?().slice(0, 19)) ? (
+        date.getUTCFullYear() + '-' +
+        ('00' + (date.getUTCMonth()+1)).slice(-2) + '-' +
+        ('00' + date.getUTCDate()).slice(-2) + ' ' +
+        ('00' + date.getUTCHours()).slice(-2) + ':' +
+        ('00' + date.getUTCMinutes()).slice(-2) + ':' +
+        ('00' + date.getUTCSeconds()).slice(-2)
+    )
+
 
 window.Utils =
     log: log
+    notify: notify
+
+    repeat: repeat
+    generateRandomId: generateRandomId
+    generateUUID: generateUUID
+    formatDate: formatDate
+    merge: merge
+    escapeHtml: escapeHtml
+    findMatch: findMatch
     reverseMap: reverseMap
+
 
     getKeyCode: getKeyCode
     getCodeKey: getCodeKey
@@ -278,4 +396,7 @@ window.Utils =
     parseHotKeyCode: parseHotKeyCode
     parseUrlString: parseUrlString
     parseBindingObject: parseBindingObject
+
+    id: id
+    isShown: isShown
 
